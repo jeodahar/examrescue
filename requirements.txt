@@ -1,0 +1,5 @@
+streamlit
+crewai
+litellm
+pymupdf
+pandas
