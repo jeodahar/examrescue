@@ -2,6 +2,7 @@ import hashlib
 import json
 import os
 from datetime import date, datetime, timedelta
+from urllib.parse import urlparse
 
 import pandas as pd
 import streamlit as st
@@ -22,6 +23,11 @@ import database as db  # noqa: E402
 import engine  # noqa: E402
 import replan  # noqa: E402
 
+try:
+    import webfetch  # noqa: E402
+except Exception:
+    webfetch = None
+
 # ---- Safety check: are all files from the same (latest) version? ----
 _REQUIRED = {
     "coach.py": (coach, ["greeting", "build_context", "ask_coach", "transcribe", "speak", "missed_day_intent"]),
@@ -29,8 +35,10 @@ _REQUIRED = {
     "database.py": (db, ["init", "save_plan", "latest_plan", "add_log", "assessments_df"]),
     "engine.py": (engine, ["plan_changes", "recovery_plan", "audit", "progress"]),
     "agents.py": (agents, ["orchestrate", "recovery_narrative", "evaluate_answer", "make_questions"]),
+    "webfetch.py": (webfetch, ["search_syllabus", "fetch_text"]),
 }
-_outdated = [f for f, (mod, names) in _REQUIRED.items() if any(not hasattr(mod, n) for n in names)]
+_outdated = [f for f, (mod, names) in _REQUIRED.items()
+             if mod is None or any(not hasattr(mod, n) for n in names)]
 if _outdated:
     st.error("Some files on GitHub are old. Please re-upload the latest version of: " + ", ".join(_outdated))
     st.stop()
@@ -96,15 +104,52 @@ with tabs[0]:
         flash("Exam details saved.")
 
     st.subheader("2️⃣ Syllabus → topics (Syllabus Agent)")
-    mode = st.radio("How do you want to add the syllabus?", ["Paste text", "Upload PDF"], horizontal=True)
+    mode = st.radio("How do you want to add the syllabus?",
+                    ["🌐 Find online", "Paste text", "Upload PDF"], horizontal=True)
     syllabus_text = ""
-    if mode == "Paste text":
+    if mode == "🌐 Find online":
+        st.caption(f"The app searches the web for the **{exam}** syllabus (change the exam name above if needed).")
+        if st.button(f"🔎 Search online for {exam} syllabus"):
+            with st.spinner("Searching the web..."):
+                try:
+                    st.session_state["web_results"] = webfetch.search_syllabus(exam)
+                    st.session_state.pop("web_text", None)
+                    if not st.session_state["web_results"]:
+                        st.warning("No results found. Paste a link below instead.")
+                except Exception as e:
+                    st.error(f"Search failed: {e}. You can paste a link below instead.")
+        results = st.session_state.get("web_results", [])
+        link = ""
+        if results:
+            labels = [f"{r['title'][:70]} - {urlparse(r['url']).netloc}" for r in results]
+            pick = st.selectbox("Choose a source (official sites and PDFs are listed first)",
+                                range(len(results)), format_func=lambda i: labels[i])
+            link = results[pick]["url"]
+            st.caption(link)
+        manual = st.text_input("...or paste a link to a syllabus page / PDF")
+        if manual.strip():
+            link = manual.strip()
+        if link and st.button("📥 Read this page"):
+            with st.spinner("Reading the page..."):
+                try:
+                    st.session_state["web_text"] = webfetch.fetch_text(link)
+                    st.session_state["web_url"] = link
+                    st.session_state["web_ver"] = st.session_state.get("web_ver", 0) + 1
+                except Exception as e:
+                    st.error(f"Could not read that link: {e}")
+        if st.session_state.get("web_text"):
+            st.caption(f"Source: {st.session_state['web_url']} - always check it against the official exam website.")
+            syllabus_text = st.text_area(
+                "Text found (delete anything unrelated, then build topics)",
+                st.session_state["web_text"], height=220,
+                key=f"web_text_box_{st.session_state.get('web_ver', 0)}")
+    elif mode == "Paste text":
         syllabus_text = st.text_area("Paste the syllabus", height=160)
     else:
         f = st.file_uploader("Syllabus PDF", type="pdf", key="syl_pdf")
         if f:
             syllabus_text = pdf_to_text(f)
-            st.caption(f"Read {len(syllabus_text)} characters (first 16,000 are used).")
+            st.caption(f"Read {len(syllabus_text)} characters (first 20,000 are used).")
     if st.button("🤖 Build topics with the Syllabus Agent"):
         if not prof:
             st.warning("Save exam details first.")

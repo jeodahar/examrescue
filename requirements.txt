@@ -5,3 +5,6 @@ groq
 gTTS
 pymupdf
 pandas
+ddgs
+requests
+beautifulsoup4

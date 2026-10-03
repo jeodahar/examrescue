@@ -76,7 +76,7 @@ def extract_json(text):
 
 # ---------------- Syllabus Agent ----------------
 def extract_syllabus(text, exam_name):
-    chunks = [text[i:i + 4000] for i in range(0, min(len(text), 16000), 4000)]
+    chunks = [text[i:i + 4000] for i in range(0, min(len(text), 20000), 4000)]
     topics = []
     for n, chunk in enumerate(chunks):
         out = _ask(
@@ -84,7 +84,7 @@ def extract_syllabus(text, exam_name):
             f"Exam: {exam_name}\nFrom the syllabus text below, list the study topics.\n"
             'Return ONLY a JSON array. Each item: {"subject": str, "topic": str, '
             '"importance": 1-5, "hours": estimated study hours 1-8}.\n'
-            "Max 40 items. Short topic names.\n\nSYLLABUS:\n" + chunk,
+            "Max 40 items. Short topic names. Ignore menus, ads, fees, dates and unrelated text.\n\nSYLLABUS:\n" + chunk,
             "A JSON array only.",
         )
         data = extract_json(out)

@@ -33,6 +33,7 @@ app.py          Streamlit screens (incl. 💬 Coach tab)
 agents.py       agent roles + prompts
 coach.py        chatbot: voice in (Groq Whisper), coach agent, voice out (gTTS)
 replan.py       auto re-plan when a missed day is logged
+webfetch.py     finds a syllabus online (web search) and reads web pages / PDFs
 engine.py       priority, recovery, progress, audit (plain Python)
 database.py     SQLite memory + backup/restore
 llm_setup.py    Groq connection + safe agent runner
@@ -48,7 +49,7 @@ requirements.txt
 ### 2. Put the code on GitHub
 1. github.com → **New repository** → name `examrescue` → Create.
 2. **Add file → Upload files**.
-3. Drag in all 8 files (`app.py`, `agents.py`, `coach.py`, `replan.py`, `engine.py`, `database.py`, `llm_setup.py`, `requirements.txt`).
+3. Drag in all 9 files (`app.py`, `agents.py`, `coach.py`, `replan.py`, `webfetch.py`, `engine.py`, `database.py`, `llm_setup.py`, `requirements.txt`).
 4. Click **Commit changes**. The files must be in the main folder, not inside a sub-folder.
 
 ### 3. Deploy on Streamlit Cloud
@@ -68,6 +69,12 @@ requirements.txt
 5. **Today**: get a timetable.
 6. **Quiz**: generate questions, answer, get scored.
 7. **Audit**: see before/after.
+
+## 🌐 Find the syllabus online
+1. Setup → type the exam name (for example `MDCAT`) → **Find online** → **Search online**.
+2. Pick a source (official sites and PDFs are listed first) or paste your own link.
+3. **Read this page**, delete unrelated text if needed, then **Build topics**.
+Always compare with the official exam website. Syllabi change every year.
 
 ## 💬 Coach chatbot with voice
 - Open the **Coach** tab. Choose English or Urdu.
