@@ -22,6 +22,19 @@ import database as db  # noqa: E402
 import engine  # noqa: E402
 import replan  # noqa: E402
 
+# ---- Safety check: are all files from the same (latest) version? ----
+_REQUIRED = {
+    "coach.py": (coach, ["greeting", "build_context", "ask_coach", "transcribe", "speak", "missed_day_intent"]),
+    "replan.py": (replan, ["auto_replan", "log_missed_and_replan"]),
+    "database.py": (db, ["init", "save_plan", "latest_plan", "add_log", "assessments_df"]),
+    "engine.py": (engine, ["plan_changes", "recovery_plan", "audit", "progress"]),
+    "agents.py": (agents, ["orchestrate", "recovery_narrative", "evaluate_answer", "make_questions"]),
+}
+_outdated = [f for f, (mod, names) in _REQUIRED.items() if any(not hasattr(mod, n) for n in names)]
+if _outdated:
+    st.error("Some files on GitHub are old. Please re-upload the latest version of: " + ", ".join(_outdated))
+    st.stop()
+
 db.init()
 
 
