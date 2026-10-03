@@ -343,6 +343,8 @@ with tabs[7]:
 
         if "chat" not in st.session_state:
             st.session_state["chat"] = []
+        if not st.session_state["chat"]:
+            st.chat_message("assistant").write(coach.greeting())
         for m in st.session_state["chat"]:
             st.chat_message(m["role"]).write(m["content"])
 
