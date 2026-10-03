@@ -142,3 +142,16 @@ def audit(adf):
             "tests": len(g), "status": status,
         })
     return pd.DataFrame(rows)
+
+
+def plan_changes(old_records, new_plan):
+    """Compare the previous saved plan with the new one. Returns readable change lines."""
+    if new_plan.empty:
+        return []
+    old = {r["topic"]: r["category"] for r in old_records}
+    changes = []
+    for r in new_plan.itertuples():
+        before = old.get(r.topic)
+        if before is not None and before != r.category:
+            changes.append(f"{r.topic}: {before.split(' ', 1)[-1]} -> {r.category.split(' ', 1)[-1]}")
+    return changes

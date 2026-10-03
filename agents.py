@@ -131,7 +131,7 @@ def recovery_narrative(summary, must, compress, postponed, skipped):
     return _ask(
         "recovery",
         "Explain this recovery plan to the student in under 180 words.\n"
-        "Sections: 1) Situation 2) Do first 3) What we cut and why 4) Honest warning (only if feasible=false).\n"
+        "Sections: 1) Situation 2) What changed (use what_changed if present) 3) Do first 4) What we cut and why 5) Honest warning (only if feasible=false).\n"
         "Do NOT change any numbers.\n"
         f"SUMMARY: {json.dumps(summary)}\nMUST (topic:hours): {json.dumps(must[:8])}\n"
         f"COMPRESS: {json.dumps(compress[:8])}\nPOSTPONE: {json.dumps(postponed[:6])}\nSKIP: {json.dumps(skipped[:6])}",

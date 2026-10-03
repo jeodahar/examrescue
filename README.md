@@ -29,8 +29,10 @@ This makes plans consistent, cheaper, and fits the Groq free limit (~8,000 token
 ## Files
 
 ```
-app.py          Streamlit screens
+app.py          Streamlit screens (incl. 💬 Coach tab)
 agents.py       agent roles + prompts
+coach.py        chatbot: voice in (Groq Whisper), coach agent, voice out (gTTS)
+replan.py       auto re-plan when a missed day is logged
 engine.py       priority, recovery, progress, audit (plain Python)
 database.py     SQLite memory + backup/restore
 llm_setup.py    Groq connection + safe agent runner
@@ -46,7 +48,7 @@ requirements.txt
 ### 2. Put the code on GitHub
 1. github.com → **New repository** → name `examrescue` → Create.
 2. **Add file → Upload files**.
-3. Drag in all 6 files (`app.py`, `agents.py`, `engine.py`, `database.py`, `llm_setup.py`, `requirements.txt`).
+3. Drag in all 8 files (`app.py`, `agents.py`, `coach.py`, `replan.py`, `engine.py`, `database.py`, `llm_setup.py`, `requirements.txt`).
 4. Click **Commit changes**. The files must be in the main folder, not inside a sub-folder.
 
 ### 3. Deploy on Streamlit Cloud
@@ -66,6 +68,17 @@ requirements.txt
 5. **Today**: get a timetable.
 6. **Quiz**: generate questions, answer, get scored.
 7. **Audit**: see before/after.
+
+## 💬 Coach chatbot with voice
+- Open the **Coach** tab. Choose English or Urdu.
+- Tap **Record your question**, speak, stop. Groq Whisper turns it into text, the Coach answers using your real data, and the answer is read aloud.
+- You can also type. Turn off "Read answers aloud" if you only want text.
+- Allow microphone access in your browser when asked.
+
+## 🔄 Auto re-plan
+- Pressing **I missed today**, accepting missed days from the Orchestrator, or telling the Coach "I missed today / yesterday" will log the day and rebuild the plan automatically.
+- The Recovery tab shows what changed (for example `Algebra: COMPRESS -> MUST RECOVER`) plus a short explanation, and keeps the latest saved plan.
+- Questions like "what if I miss today?" are NOT treated as a missed day.
 
 ## Important notes
 - **Data can reset.** Streamlit Cloud storage is temporary. Use **Download backup** in the sidebar regularly. (Supabase can be added later for permanent storage.)

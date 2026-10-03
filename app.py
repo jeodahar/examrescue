@@ -1,3 +1,5 @@
+import hashlib
+import json
 import os
 from datetime import date, datetime, timedelta
 
@@ -15,8 +17,10 @@ if _key:
     os.environ["GROQ_API_KEY"] = _key
 
 import agents  # noqa: E402
+import coach  # noqa: E402
 import database as db  # noqa: E402
 import engine  # noqa: E402
+import replan  # noqa: E402
 
 db.init()
 
@@ -56,7 +60,7 @@ with st.sidebar:
 prof = db.get_profile()
 tdf = db.topics_df()
 
-tabs = st.tabs(["⚙️ Setup", "📊 Dashboard", "📝 Check-in", "🛟 Recovery", "📅 Today", "🧪 Quiz", "🔍 Audit"])
+tabs = st.tabs(["⚙️ Setup", "📊 Dashboard", "📝 Check-in", "🛟 Recovery", "📅 Today", "🧪 Quiz", "🔍 Audit", "💬 Coach"])
 
 
 def need_setup():
@@ -169,9 +173,9 @@ with tabs[2]:
         if l1.button("✅ Log study session"):
             db.add_log(hrs, 0, opts[sel])
             flash("Study session logged.")
-        if l2.button("❌ I missed today"):
-            db.add_log(0, 1, None)
-            flash("Missed day recorded.")
+        if l2.button("❌ I missed today (auto re-plan)"):
+            with st.spinner("Recording and rebuilding your plan..."):
+                flash(replan.log_missed_and_replan())
 
         st.subheader("Tell the Orchestrator what happened")
         situation = st.text_area(
@@ -191,10 +195,12 @@ with tabs[2]:
             st.write(f"**Suggested next steps:** {', '.join(o.get('next_steps', [])) or '-'}")
             miss = int(o.get("missed_days") or 0)
             if miss > 0 and st.button(f"Record {miss} missed days in my log"):
-                for _ in range(miss):
-                    db.add_log(0, 1, None)
+                with st.spinner("Recording and rebuilding your plan..."):
+                    for i in range(miss):
+                        db.add_log(0, 1, None)
+                    replan.auto_replan()
                 st.session_state.pop("orch", None)
-                flash(f"{miss} missed days recorded.")
+                flash(f"{miss} missed days recorded. Plan rebuilt automatically.")
 
 # ------------------------------------------------------------------ RECOVERY
 with tabs[3]:
@@ -215,22 +221,25 @@ with tabs[3]:
                      "Add study hours, accept lower coverage, or consider moving the exam.")
         st.dataframe(plan)
 
-        if st.button("🤖 Ask the Recovery Planner to explain"):
-            def pick(tag):
-                s = plan[plan["category"].str.contains(tag)]
-                return s
+        if st.button("🔄 Rebuild plan now"):
+            with st.spinner("Recovery Planner is rebuilding the plan..."):
+                replan.auto_replan()
+            flash("Plan rebuilt.")
 
-            must = [f"{r.topic}:{r.hours}" for r in pick("MUST").itertuples()]
-            comp = [f"{r.topic}:{r.hours}" for r in pick("COMPRESS").itertuples()]
-            post = [r.topic for r in pick("POSTPONE").itertuples()]
-            skip = [r.topic for r in pick("SKIP").itertuples()]
-            with st.spinner("Recovery Planner is writing..."):
-                try:
-                    st.session_state["recovery_text"] = agents.recovery_narrative(summ, must, comp, post, skip)
-                except Exception as e:
-                    st.error(f"Agent error: {e}")
-        if st.session_state.get("recovery_text"):
-            st.markdown(st.session_state["recovery_text"])
+        last = db.latest_plan()
+        if last:
+            st.subheader(f"Latest auto re-plan ({last['created']})")
+            changes = json.loads(last["changes"] or "[]")
+            if changes:
+                st.write("**What changed since the previous plan:**")
+                for c in changes[:12]:
+                    st.write(f"- {c}")
+            else:
+                st.caption("No category changes since the previous plan.")
+            if last["narrative"]:
+                st.markdown(last["narrative"])
+        else:
+            st.caption("No saved plan yet. It is created automatically when you log a missed day.")
 
 # ------------------------------------------------------------------ TODAY
 with tabs[4]:
@@ -321,3 +330,70 @@ with tabs[6]:
                         st.error(f"Agent error: {e}")
             if st.session_state.get("audit"):
                 st.markdown(st.session_state["audit"])
+
+# ------------------------------------------------------------------ COACH (chatbot + voice)
+with tabs[7]:
+    if not need_setup():
+        st.subheader("💬 Study Coach")
+        cc1, cc2 = st.columns(2)
+        language = cc1.radio("Voice language", ["English", "Urdu"], horizontal=True)
+        speak_on = cc2.toggle("🔊 Read answers aloud", value=True)
+        st.caption("Ask about your progress, priorities, or a topic. "
+                   "Say or type \"I missed today\" and the plan rebuilds automatically.")
+
+        if "chat" not in st.session_state:
+            st.session_state["chat"] = []
+        for m in st.session_state["chat"]:
+            st.chat_message(m["role"]).write(m["content"])
+
+        # play the latest spoken answer (auto-play only once)
+        voice = st.session_state.get("voice_reply")
+        if voice:
+            st.audio(voice["bytes"], format="audio/mp3", autoplay=not voice["played"])
+            voice["played"] = True
+
+        audio = st.audio_input("🎤 Record your question")
+        with st.form("chat_form", clear_on_submit=True):
+            typed = st.text_input("Or type your question")
+            sent = st.form_submit_button("Send")
+
+        question = None
+        if sent and typed.strip():
+            question = typed.strip()
+        elif audio is not None:
+            data = audio.getvalue()
+            h = hashlib.md5(data).hexdigest()
+            if h != st.session_state.get("last_audio"):
+                st.session_state["last_audio"] = h
+                with st.spinner("Transcribing your voice..."):
+                    try:
+                        question = coach.transcribe(data, language)
+                    except Exception as e:
+                        st.error(f"Could not transcribe: {e}")
+                if question is not None and not question:
+                    st.warning("I could not hear anything. Please record again.")
+                    question = None
+
+        if question:
+            history = list(st.session_state["chat"])
+            st.session_state["chat"].append({"role": "user", "content": question})
+            when = coach.missed_day_intent(question)
+            with st.spinner("Coach is thinking..."):
+                try:
+                    if when:
+                        day = (date.today() - timedelta(days=1)).isoformat() if when == "yesterday" else None
+                        reply = replan.log_missed_and_replan(day)
+                    else:
+                        reply = coach.ask_coach(question, history, language)
+                except Exception as e:
+                    reply = f"Sorry, something went wrong: {e}"
+            st.session_state["chat"].append({"role": "assistant", "content": reply})
+            if speak_on:
+                mp3 = coach.speak(reply, language)
+                st.session_state["voice_reply"] = {"bytes": mp3, "played": False} if mp3 else None
+            st.rerun()
+
+        if st.session_state["chat"] and st.button("🧹 Clear chat"):
+            st.session_state["chat"] = []
+            st.session_state["voice_reply"] = None
+            st.rerun()

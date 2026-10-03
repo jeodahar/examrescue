@@ -6,12 +6,12 @@ the app sleeps or redeploys. Use the Backup / Restore buttons in the sidebar.
 import json
 import sqlite3
 from contextlib import contextmanager
-from datetime import date
+from datetime import date, datetime
 
 import pandas as pd
 
 DB_PATH = "examrescue.db"
-TABLES = ["profile", "topics", "study_log", "assessments"]
+TABLES = ["profile", "topics", "study_log", "assessments", "plans"]
 
 
 @contextmanager
@@ -47,6 +47,10 @@ def init():
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 topic_id INTEGER, day TEXT, score REAL,
                 mistake_type TEXT, feedback TEXT);
+            CREATE TABLE IF NOT EXISTS plans (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                created TEXT, summary TEXT, plan_json TEXT,
+                narrative TEXT, changes TEXT);
             """
         )
 
@@ -144,11 +148,12 @@ def set_past_freq(mapping):
 
 
 # ---------- study log ----------
-def add_log(hours, missed=0, topic_id=None):
+def add_log(hours, missed=0, topic_id=None, day=None):
+    day = day or date.today().isoformat()
     with _conn() as c:
         c.execute(
             "INSERT INTO study_log (day, hours, missed, topic_id) VALUES (?,?,?,?)",
-            (date.today().isoformat(), float(hours), int(missed), topic_id),
+            (day, float(hours), int(missed), topic_id),
         )
         if topic_id and hours > 0:
             c.execute(
@@ -184,6 +189,27 @@ def assessments_df():
                FROM assessments a JOIN topics t ON t.id = a.topic_id ORDER BY a.id""",
             c,
         )
+
+
+# ---------- saved recovery plans (auto re-plan history) ----------
+def save_plan(summary, plan_df, narrative, changes):
+    with _conn() as c:
+        c.execute(
+            "INSERT INTO plans (created, summary, plan_json, narrative, changes) VALUES (?,?,?,?,?)",
+            (
+                datetime.now().strftime("%Y-%m-%d %H:%M"),
+                json.dumps(summary),
+                plan_df[["topic", "category", "hours"]].to_json(orient="records"),
+                narrative or "",
+                json.dumps(changes),
+            ),
+        )
+
+
+def latest_plan():
+    with _conn() as c:
+        row = c.execute("SELECT * FROM plans ORDER BY id DESC LIMIT 1").fetchone()
+        return dict(row) if row else None
 
 
 # ---------- backup / restore ----------
